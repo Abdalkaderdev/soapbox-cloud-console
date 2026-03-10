@@ -25,7 +25,7 @@ export async function GET(
 
     const { id } = await params;
 
-    const response = await fetch(`${apiUrl}/admin/apps/${id}`, {
+    const response = await fetch(`${apiUrl}/api/admin/apps/${id}`, {
       headers: {
         Authorization: `Bearer ${(session as { accessToken?: string })?.accessToken}`,
         "Content-Type": "application/json",
@@ -85,7 +85,7 @@ export async function PATCH(
       );
     }
 
-    const response = await fetch(`${apiUrl}/admin/apps/${id}`, {
+    const response = await fetch(`${apiUrl}/api/admin/apps/${id}`, {
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${(session as { accessToken?: string })?.accessToken}`,

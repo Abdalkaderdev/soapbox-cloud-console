@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useSession, signOut } from "next-auth/react"
 import {
   LayoutDashboard,
   Code2,
@@ -25,6 +26,7 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { data: session } = useSession()
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--card))]">
@@ -70,14 +72,15 @@ export function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="truncate text-sm font-medium text-[hsl(var(--foreground))]">
-              Admin User
+              {session?.user?.name || "User"}
             </p>
             <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
-              admin@soapbox.com
+              {session?.user?.email || ""}
             </p>
           </div>
         </div>
         <button
+          onClick={() => signOut({ callbackUrl: '/login' })}
           className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-[hsl(var(--muted-foreground))] transition-colors hover:bg-[hsl(var(--destructive))] hover:text-[hsl(var(--destructive-foreground))]"
         >
           <LogOut className="h-5 w-5" />

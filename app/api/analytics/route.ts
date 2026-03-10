@@ -20,7 +20,7 @@ export async function GET() {
       );
     }
 
-    const response = await fetch(`${apiUrl}/admin/analytics`, {
+    const response = await fetch(`${apiUrl}/api/admin/analytics/overview`, {
       headers: {
         Authorization: `Bearer ${(session as { accessToken?: string })?.accessToken}`,
         "Content-Type": "application/json",

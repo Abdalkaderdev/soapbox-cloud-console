@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,77 +11,52 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
 
-// Mock data for the app
-const mockApp = {
-  id: "app_abc123def456",
-  name: "WeatherBot Pro",
-  description:
-    "An intelligent weather assistant that provides real-time forecasts, severe weather alerts, and personalized recommendations based on user location and preferences.",
-  clientId: "cli_7x9k2m4n5p8q",
-  clientSecret: "sec_••••••••••••••••",
-  createdAt: "2025-01-15T10:30:00Z",
-  updatedAt: "2025-02-20T14:45:00Z",
-  status: "pending" as "pending" | "approved" | "rejected" | "suspended",
+interface ReviewNote {
+  id: string;
+  author: string;
+  content: string;
+  createdAt: string;
+}
+
+interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  status: "active" | "inactive";
+}
+
+interface App {
+  id: string;
+  name: string;
+  description: string;
+  clientId: string;
+  clientSecret: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "pending" | "approved" | "rejected" | "suspended";
   developer: {
-    id: "dev_xyz789",
-    name: "Sarah Chen",
-    email: "sarah.chen@techstartup.io",
-    company: "TechStartup Inc.",
-  },
+    id: string;
+    name: string;
+    email: string;
+    company: string;
+  };
   oauth: {
-    redirectUris: [
-      "https://weatherbot.app/callback",
-      "https://staging.weatherbot.app/callback",
-      "http://localhost:3000/callback",
-    ],
-    scopes: [
-      "user:read",
-      "user:location",
-      "weather:current",
-      "weather:forecast",
-      "alerts:subscribe",
-    ],
-    grantTypes: ["authorization_code", "refresh_token"],
-  },
-  webhooks: [
-    {
-      id: "wh_001",
-      url: "https://weatherbot.app/webhooks/soapbox",
-      events: ["user.created", "subscription.updated"],
-      status: "active",
-    },
-    {
-      id: "wh_002",
-      url: "https://weatherbot.app/webhooks/alerts",
-      events: ["alert.triggered"],
-      status: "inactive",
-    },
-  ],
+    redirectUris: string[];
+    scopes: string[];
+    grantTypes: string[];
+  };
+  webhooks: Webhook[];
   apiUsage: {
-    totalRequests: 156420,
-    requestsThisMonth: 23450,
-    avgLatency: 145,
-    errorRate: 0.8,
-    lastApiCall: "2025-02-28T18:22:00Z",
-  },
-  reviewNotes: [
-    {
-      id: "note_001",
-      author: "Admin Mike",
-      content:
-        "Initial review: App looks legitimate. Requesting additional documentation on data handling practices.",
-      createdAt: "2025-01-16T09:00:00Z",
-    },
-    {
-      id: "note_002",
-      author: "Admin Lisa",
-      content:
-        "Developer provided updated privacy policy. Reviewing OAuth scope requests.",
-      createdAt: "2025-01-18T14:30:00Z",
-    },
-  ],
-};
+    totalRequests: number;
+    requestsThisMonth: number;
+    avgLatency: number;
+    errorRate: number;
+    lastApiCall: string;
+  };
+  reviewNotes: ReviewNote[];
+}
 
 type ReviewStatus = "pending" | "approved" | "rejected" | "suspended";
 
@@ -111,9 +87,40 @@ const statusConfig: Record<
 };
 
 export default function AppDetailPage() {
-  const [app, setApp] = useState(mockApp);
+  const params = useParams();
+  const router = useRouter();
+  const appId = params.id as string;
+
+  const [app, setApp] = useState<App | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [newNote, setNewNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchApp = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/apps/${appId}`);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to fetch app");
+      }
+
+      const data = await response.json();
+      setApp(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [appId]);
+
+  useEffect(() => {
+    fetchApp();
+  }, [fetchApp]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -129,45 +136,122 @@ export default function AppDetailPage() {
     return new Intl.NumberFormat("en-US").format(num);
   };
 
-  const handleStatusChange = (newStatus: ReviewStatus) => {
+  const handleStatusChange = async (newStatus: ReviewStatus) => {
     setIsSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
-      setApp((prev) => ({ ...prev, status: newStatus }));
+    try {
+      const actionMap: Record<ReviewStatus, string> = {
+        approved: "approve",
+        rejected: "reject",
+        suspended: "suspend",
+        pending: "pending", // This shouldn't be used normally
+      };
+
+      const response = await fetch(`/api/apps/${appId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: actionMap[newStatus] }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to update app status");
+      }
+
+      const updatedApp = await response.json();
+      setApp((prev) => prev ? { ...prev, status: updatedApp.status || newStatus } : null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to update app status");
+    } finally {
       setIsSubmitting(false);
-    }, 500);
+    }
   };
 
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     if (!newNote.trim()) return;
     setIsSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Note: You may need to implement a separate API endpoint for adding notes
+      // For now, we'll optimistically add the note locally
       const note = {
         id: `note_${Date.now()}`,
         author: "Current Admin",
         content: newNote,
         createdAt: new Date().toISOString(),
       };
-      setApp((prev) => ({
-        ...prev,
-        reviewNotes: [...prev.reviewNotes, note],
-      }));
+      setApp((prev) =>
+        prev
+          ? {
+              ...prev,
+              reviewNotes: [...(prev.reviewNotes || []), note],
+            }
+          : null
+      );
       setNewNote("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to add note");
+    } finally {
       setIsSubmitting(false);
-    }, 500);
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (
-      confirm(
+      !confirm(
         "Are you sure you want to delete this app? This action cannot be undone."
       )
     ) {
-      // Simulate API call
-      alert("App deleted successfully");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`/api/apps/${appId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to delete app");
+      }
+
+      router.push("/apps");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete app");
+      setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
+
+  if (error || !app) {
+    return (
+      <div className="min-h-screen bg-zinc-950 p-8">
+        <div className="max-w-6xl mx-auto">
+          <Card className="border-red-500/50 bg-red-500/10">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3 text-red-500">
+                <AlertCircle className="h-5 w-5" />
+                <p>{error || "App not found"}</p>
+                <Button variant="outline" size="sm" onClick={fetchApp} className="ml-auto">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => router.push("/apps")}>
+                  Back to Apps
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const status = statusConfig[app.status];
 
@@ -186,10 +270,16 @@ export default function AppDetailPage() {
             <h1 className="text-3xl font-bold text-white">{app.name}</h1>
             <p className="text-zinc-400 mt-1">{app.description}</p>
           </div>
-          <div
-            className={`px-4 py-2 rounded-full ${status.bgColor} ${status.color} font-medium`}
-          >
-            {status.label}
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={fetchApp}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <div
+              className={`px-4 py-2 rounded-full ${status.bgColor} ${status.color} font-medium`}
+            >
+              {status.label}
+            </div>
           </div>
         </div>
 
@@ -208,6 +298,9 @@ export default function AppDetailPage() {
                   onClick={() => handleStatusChange("approved")}
                   disabled={isSubmitting}
                 >
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
                   Approve App
                 </Button>
               )}
@@ -217,6 +310,9 @@ export default function AppDetailPage() {
                   onClick={() => handleStatusChange("rejected")}
                   disabled={isSubmitting}
                 >
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
                   Reject App
                 </Button>
               )}
@@ -226,6 +322,9 @@ export default function AppDetailPage() {
                   onClick={() => handleStatusChange("suspended")}
                   disabled={isSubmitting}
                 >
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
                   Suspend App
                 </Button>
               )}
@@ -235,6 +334,9 @@ export default function AppDetailPage() {
                   onClick={() => handleStatusChange("approved")}
                   disabled={isSubmitting}
                 >
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
                   Reactivate App
                 </Button>
               )}
@@ -244,6 +346,9 @@ export default function AppDetailPage() {
                 disabled={isSubmitting}
                 className="border-red-800 text-red-400 hover:bg-red-950 hover:text-red-300"
               >
+                {isSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
                 Delete App
               </Button>
             </div>
@@ -331,7 +436,7 @@ export default function AppDetailPage() {
               <div>
                 <label className="text-sm text-zinc-400">Redirect URIs</label>
                 <div className="mt-1 space-y-1">
-                  {app.oauth.redirectUris.map((uri, index) => (
+                  {app.oauth?.redirectUris?.map((uri, index) => (
                     <p
                       key={index}
                       className="text-zinc-200 font-mono text-sm bg-zinc-800 px-3 py-2 rounded"
@@ -344,7 +449,7 @@ export default function AppDetailPage() {
               <div>
                 <label className="text-sm text-zinc-400">Requested Scopes</label>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {app.oauth.scopes.map((scope, index) => (
+                  {app.oauth?.scopes?.map((scope, index) => (
                     <span
                       key={index}
                       className="px-2 py-1 bg-zinc-800 text-zinc-200 text-sm rounded font-mono"
@@ -357,7 +462,7 @@ export default function AppDetailPage() {
               <div>
                 <label className="text-sm text-zinc-400">Grant Types</label>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {app.oauth.grantTypes.map((grant, index) => (
+                  {app.oauth?.grantTypes?.map((grant, index) => (
                     <span
                       key={index}
                       className="px-2 py-1 bg-green-400/10 text-green-400 text-sm rounded"
@@ -377,56 +482,64 @@ export default function AppDetailPage() {
               <CardDescription>Usage metrics for this application</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-zinc-800 p-4 rounded-lg">
-                  <p className="text-sm text-zinc-400">Total Requests</p>
-                  <p className="text-2xl font-bold text-white">
-                    {formatNumber(app.apiUsage.totalRequests)}
-                  </p>
+              {app.apiUsage ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-zinc-800 p-4 rounded-lg">
+                      <p className="text-sm text-zinc-400">Total Requests</p>
+                      <p className="text-2xl font-bold text-white">
+                        {formatNumber(app.apiUsage.totalRequests)}
+                      </p>
+                    </div>
+                    <div className="bg-zinc-800 p-4 rounded-lg">
+                      <p className="text-sm text-zinc-400">This Month</p>
+                      <p className="text-2xl font-bold text-white">
+                        {formatNumber(app.apiUsage.requestsThisMonth)}
+                      </p>
+                    </div>
+                    <div className="bg-zinc-800 p-4 rounded-lg">
+                      <p className="text-sm text-zinc-400">Avg Latency</p>
+                      <p className="text-2xl font-bold text-white">
+                        {app.apiUsage.avgLatency}ms
+                      </p>
+                    </div>
+                    <div className="bg-zinc-800 p-4 rounded-lg">
+                      <p className="text-sm text-zinc-400">Error Rate</p>
+                      <p className="text-2xl font-bold text-white">
+                        {app.apiUsage.errorRate}%
+                      </p>
+                    </div>
+                  </div>
+                  {app.apiUsage.lastApiCall && (
+                    <div className="mt-4 pt-4 border-t border-zinc-800">
+                      <p className="text-sm text-zinc-400">
+                        Last API Call:{" "}
+                        <span className="text-zinc-200">
+                          {formatDate(app.apiUsage.lastApiCall)}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="py-8 text-center text-zinc-400">
+                  No usage data available
                 </div>
-                <div className="bg-zinc-800 p-4 rounded-lg">
-                  <p className="text-sm text-zinc-400">This Month</p>
-                  <p className="text-2xl font-bold text-white">
-                    {formatNumber(app.apiUsage.requestsThisMonth)}
-                  </p>
-                </div>
-                <div className="bg-zinc-800 p-4 rounded-lg">
-                  <p className="text-sm text-zinc-400">Avg Latency</p>
-                  <p className="text-2xl font-bold text-white">
-                    {app.apiUsage.avgLatency}ms
-                  </p>
-                </div>
-                <div className="bg-zinc-800 p-4 rounded-lg">
-                  <p className="text-sm text-zinc-400">Error Rate</p>
-                  <p className="text-2xl font-bold text-white">
-                    {app.apiUsage.errorRate}%
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-zinc-800">
-                <p className="text-sm text-zinc-400">
-                  Last API Call:{" "}
-                  <span className="text-zinc-200">
-                    {formatDate(app.apiUsage.lastApiCall)}
-                  </span>
-                </p>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* Webhook Configurations */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Webhook Configurations</CardTitle>
-            <CardDescription>
-              Configured webhooks for this application
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {app.webhooks.length === 0 ? (
-              <p className="text-zinc-400">No webhooks configured</p>
-            ) : (
+        {app.webhooks && app.webhooks.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Webhook Configurations</CardTitle>
+              <CardDescription>
+                Configured webhooks for this application
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <div className="space-y-4">
                 {app.webhooks.map((webhook) => (
                   <div
@@ -464,9 +577,9 @@ export default function AppDetailPage() {
                   </div>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Review Notes */}
         <Card>
@@ -478,20 +591,24 @@ export default function AppDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {app.reviewNotes.map((note) => (
-                <div
-                  key={note.id}
-                  className="border-l-2 border-zinc-700 pl-4 py-2"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-white font-medium">{note.author}</span>
-                    <span className="text-zinc-500 text-sm">
-                      {formatDate(note.createdAt)}
-                    </span>
+              {(!app.reviewNotes || app.reviewNotes.length === 0) ? (
+                <p className="text-zinc-400">No review notes yet</p>
+              ) : (
+                app.reviewNotes.map((note) => (
+                  <div
+                    key={note.id}
+                    className="border-l-2 border-zinc-700 pl-4 py-2"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-white font-medium">{note.author}</span>
+                      <span className="text-zinc-500 text-sm">
+                        {formatDate(note.createdAt)}
+                      </span>
+                    </div>
+                    <p className="text-zinc-300">{note.content}</p>
                   </div>
-                  <p className="text-zinc-300">{note.content}</p>
-                </div>
-              ))}
+                ))
+              )}
 
               {/* Add new note */}
               <div className="mt-6 pt-6 border-t border-zinc-800">
@@ -509,6 +626,9 @@ export default function AppDetailPage() {
                     onClick={handleAddNote}
                     disabled={!newNote.trim() || isSubmitting}
                   >
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
                     Add Note
                   </Button>
                 </div>

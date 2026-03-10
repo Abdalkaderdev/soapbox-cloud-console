@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import {
   Card,
   CardContent,
@@ -18,99 +19,29 @@ import {
   TableCell
 } from "@/components/ui"
 import { Header } from "@/components/layout"
-import { Search, MoreHorizontal, Eye, CheckCircle, Ban, Mail } from "lucide-react"
+import { Search, Eye, CheckCircle, Ban, Mail, Loader2, RefreshCw, AlertCircle } from "lucide-react"
 
-// Mock data for developers
-const mockDevelopers = [
-  {
-    id: "dev_001",
-    name: "John Smith",
-    email: "john.smith@acmecorp.com",
-    company: "Acme Corporation",
-    status: "active",
-    apps: 5,
-    apiCalls: "1.2M",
-    joinedAt: "2024-01-15",
-    plan: "Enterprise",
-  },
-  {
-    id: "dev_002",
-    name: "Sarah Johnson",
-    email: "sarah@techstartup.io",
-    company: "Tech Startup Inc",
-    status: "active",
-    apps: 3,
-    apiCalls: "450K",
-    joinedAt: "2024-02-20",
-    plan: "Pro",
-  },
-  {
-    id: "dev_003",
-    name: "Mike Chen",
-    email: "mike.chen@devhouse.com",
-    company: "DevHouse",
-    status: "pending",
-    apps: 0,
-    apiCalls: "0",
-    joinedAt: "2024-03-10",
-    plan: "Free",
-  },
-  {
-    id: "dev_004",
-    name: "Emily Davis",
-    email: "emily@webagency.co",
-    company: "Web Agency Co",
-    status: "active",
-    apps: 8,
-    apiCalls: "2.8M",
-    joinedAt: "2023-11-05",
-    plan: "Enterprise",
-  },
-  {
-    id: "dev_005",
-    name: "Alex Thompson",
-    email: "alex.t@freelance.dev",
-    company: "Independent",
-    status: "suspended",
-    apps: 2,
-    apiCalls: "125K",
-    joinedAt: "2024-01-30",
-    plan: "Pro",
-  },
-  {
-    id: "dev_006",
-    name: "Lisa Wang",
-    email: "lisa.wang@bigtech.com",
-    company: "BigTech Solutions",
-    status: "active",
-    apps: 12,
-    apiCalls: "5.6M",
-    joinedAt: "2023-08-12",
-    plan: "Enterprise",
-  },
-  {
-    id: "dev_007",
-    name: "David Kim",
-    email: "david@newdev.io",
-    company: "NewDev Studio",
-    status: "pending",
-    apps: 0,
-    apiCalls: "0",
-    joinedAt: "2024-03-09",
-    plan: "Free",
-  },
-  {
-    id: "dev_008",
-    name: "Rachel Green",
-    email: "rachel@consulting.biz",
-    company: "Tech Consulting",
-    status: "active",
-    apps: 4,
-    apiCalls: "890K",
-    joinedAt: "2024-02-01",
-    plan: "Pro",
-  },
-]
+interface Developer {
+  id: string
+  name: string
+  email: string
+  company: string
+  status: "active" | "pending" | "suspended"
+  apps: number
+  apiCalls: string
+  joinedAt: string
+  plan: string
+}
+
+interface DevelopersResponse {
+  developers: Developer[]
+  total: number
+  stats?: {
+    active: number
+    pending: number
+    suspended: number
+  }
+}
 
 function getStatusBadgeVariant(status: string): "success" | "warning" | "destructive" | "secondary" {
   switch (status) {
@@ -137,11 +68,124 @@ function getPlanBadgeVariant(plan: string): "default" | "secondary" | "outline" 
 }
 
 export default function DevelopersPage() {
+  const router = useRouter()
+  const [developers, setDevelopers] = useState<Developer[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [planFilter, setPlanFilter] = useState("all")
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
 
-  const filteredDevelopers = mockDevelopers.filter((dev) => {
+  const fetchDevelopers = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/developers")
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to fetch developers")
+      }
+
+      const data: DevelopersResponse = await response.json()
+      setDevelopers(data.developers || data as unknown as Developer[])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchDevelopers()
+  }, [fetchDevelopers])
+
+  const handleApprove = async (developerId: string) => {
+    setActionLoading(developerId)
+    try {
+      const response = await fetch(`/api/developers/${developerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve" }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to approve developer")
+      }
+
+      // Update local state
+      setDevelopers(prev =>
+        prev.map(dev =>
+          dev.id === developerId ? { ...dev, status: "active" } : dev
+        )
+      )
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to approve developer")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleSuspend = async (developerId: string) => {
+    if (!confirm("Are you sure you want to suspend this developer?")) return
+
+    setActionLoading(developerId)
+    try {
+      const response = await fetch(`/api/developers/${developerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "suspend" }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to suspend developer")
+      }
+
+      // Update local state
+      setDevelopers(prev =>
+        prev.map(dev =>
+          dev.id === developerId ? { ...dev, status: "suspended" } : dev
+        )
+      )
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to suspend developer")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleActivate = async (developerId: string) => {
+    setActionLoading(developerId)
+    try {
+      const response = await fetch(`/api/developers/${developerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "activate" }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to activate developer")
+      }
+
+      // Update local state
+      setDevelopers(prev =>
+        prev.map(dev =>
+          dev.id === developerId ? { ...dev, status: "active" } : dev
+        )
+      )
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to activate developer")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const filteredDevelopers = developers.filter((dev) => {
     const matchesSearch =
       dev.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       dev.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -150,6 +194,13 @@ export default function DevelopersPage() {
     const matchesPlan = planFilter === "all" || dev.plan === planFilter
     return matchesSearch && matchesStatus && matchesPlan
   })
+
+  const stats = {
+    total: developers.length,
+    active: developers.filter(d => d.status === "active").length,
+    pending: developers.filter(d => d.status === "pending").length,
+    suspended: developers.filter(d => d.status === "suspended").length,
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -164,7 +215,7 @@ export default function DevelopersPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-[hsl(var(--foreground))]">
-                {mockDevelopers.length}
+                {isLoading ? "-" : stats.total}
               </div>
               <p className="text-sm text-[hsl(var(--muted-foreground))]">Total Developers</p>
             </CardContent>
@@ -172,7 +223,7 @@ export default function DevelopersPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-emerald-500">
-                {mockDevelopers.filter(d => d.status === "active").length}
+                {isLoading ? "-" : stats.active}
               </div>
               <p className="text-sm text-[hsl(var(--muted-foreground))]">Active</p>
             </CardContent>
@@ -180,7 +231,7 @@ export default function DevelopersPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-amber-500">
-                {mockDevelopers.filter(d => d.status === "pending").length}
+                {isLoading ? "-" : stats.pending}
               </div>
               <p className="text-sm text-[hsl(var(--muted-foreground))]">Pending Approval</p>
             </CardContent>
@@ -188,7 +239,7 @@ export default function DevelopersPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-red-500">
-                {mockDevelopers.filter(d => d.status === "suspended").length}
+                {isLoading ? "-" : stats.suspended}
               </div>
               <p className="text-sm text-[hsl(var(--muted-foreground))]">Suspended</p>
             </CardContent>
@@ -229,10 +280,29 @@ export default function DevelopersPage() {
                   <option value="Pro">Pro</option>
                   <option value="Free">Free</option>
                 </Select>
+                <Button variant="outline" onClick={fetchDevelopers} disabled={isLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Error State */}
+        {error && (
+          <Card className="border-red-500/50 bg-red-500/10">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3 text-red-500">
+                <AlertCircle className="h-5 w-5" />
+                <p>{error}</p>
+                <Button variant="outline" size="sm" onClick={fetchDevelopers} className="ml-auto">
+                  Retry
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Developers Table */}
         <Card>
@@ -240,77 +310,125 @@ export default function DevelopersPage() {
             <CardTitle>All Developers</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Developer</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Apps</TableHead>
-                  <TableHead>API Calls</TableHead>
-                  <TableHead>Joined</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredDevelopers.map((developer) => (
-                  <TableRow key={developer.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{developer.name}</p>
-                        <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                          {developer.email}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{developer.company}</TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusBadgeVariant(developer.status)}>
-                        {developer.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getPlanBadgeVariant(developer.plan)}>
-                        {developer.plan}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{developer.apps}</TableCell>
-                    <TableCell>{developer.apiCalls}</TableCell>
-                    <TableCell className="text-[hsl(var(--muted-foreground))]">
-                      {developer.joinedAt}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="icon" title="View Details">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {developer.status === "pending" && (
-                          <Button variant="ghost" size="icon" title="Approve">
-                            <CheckCircle className="h-4 w-4 text-emerald-500" />
-                          </Button>
-                        )}
-                        {developer.status !== "suspended" && (
-                          <Button variant="ghost" size="icon" title="Suspend">
-                            <Ban className="h-4 w-4 text-red-500" />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon" title="Send Email">
-                          <Mail className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-
-            {filteredDevelopers.length === 0 && (
-              <div className="py-12 text-center">
-                <p className="text-[hsl(var(--muted-foreground))]">
-                  No developers found matching your criteria.
-                </p>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--muted-foreground))]" />
               </div>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Developer</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Apps</TableHead>
+                      <TableHead>API Calls</TableHead>
+                      <TableHead>Joined</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredDevelopers.map((developer) => (
+                      <TableRow key={developer.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{developer.name}</p>
+                            <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                              {developer.email}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{developer.company}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(developer.status)}>
+                            {developer.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getPlanBadgeVariant(developer.plan)}>
+                            {developer.plan}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{developer.apps}</TableCell>
+                        <TableCell>{developer.apiCalls}</TableCell>
+                        <TableCell className="text-[hsl(var(--muted-foreground))]">
+                          {developer.joinedAt}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="View Details"
+                              onClick={() => router.push(`/developers/${developer.id}`)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {developer.status === "pending" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Approve"
+                                onClick={() => handleApprove(developer.id)}
+                                disabled={actionLoading === developer.id}
+                              >
+                                {actionLoading === developer.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="h-4 w-4 text-emerald-500" />
+                                )}
+                              </Button>
+                            )}
+                            {developer.status === "suspended" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Activate"
+                                onClick={() => handleActivate(developer.id)}
+                                disabled={actionLoading === developer.id}
+                              >
+                                {actionLoading === developer.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="h-4 w-4 text-emerald-500" />
+                                )}
+                              </Button>
+                            )}
+                            {developer.status !== "suspended" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Suspend"
+                                onClick={() => handleSuspend(developer.id)}
+                                disabled={actionLoading === developer.id}
+                              >
+                                {actionLoading === developer.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Ban className="h-4 w-4 text-red-500" />
+                                )}
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" title="Send Email">
+                              <Mail className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                {filteredDevelopers.length === 0 && !isLoading && (
+                  <div className="py-12 text-center">
+                    <p className="text-[hsl(var(--muted-foreground))]">
+                      No developers found matching your criteria.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

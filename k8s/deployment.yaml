@@ -12,9 +12,9 @@ metadata:
   namespace: soapbox-cloud-console
 type: Opaque
 stringData:
-  NEXTAUTH_SECRET: "placeholder-replace-with-actual-secret"
+  NEXTAUTH_SECRET: "GSTzGzUw/3bGTYxaQ0pTlQ+oa+UAymEBa2HOvthfCn0="
   NEXTAUTH_URL: "https://cloud.soapboxsuperapp.com"
-  SOAPBOX_API_URL: "placeholder-replace-with-actual-url"
+  SOAPBOX_API_URL: "https://api.soapboxsuperapp.com"
 
 ---
 apiVersion: apps/v1
@@ -76,6 +76,8 @@ spec:
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
+      imagePullSecrets:
+        - name: ghcr-auth
 
 ---
 apiVersion: v1

@@ -1,5 +1,7 @@
 "use client"
 
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from "@/components/ui"
 import { Header } from "@/components/layout"
 import {
@@ -20,154 +22,52 @@ import {
   Server,
   Database,
   Wifi,
-  Shield
+  Shield,
+  Loader2,
+  RefreshCw,
+  AlertCircle
 } from "lucide-react"
 
-// Mock data for stats
-const stats = [
-  {
-    name: "Total Developers",
-    value: "2,847",
-    change: "+12.5%",
-    trend: "up",
-    icon: Users,
-  },
-  {
-    name: "Active Apps",
-    value: "1,423",
-    change: "+8.2%",
-    trend: "up",
-    icon: AppWindow,
-  },
-  {
-    name: "API Requests Today",
-    value: "4.2M",
-    change: "+23.1%",
-    trend: "up",
-    icon: Activity,
-  },
-  {
-    name: "Revenue (MTD)",
-    value: "$48,392",
-    change: "-2.4%",
-    trend: "down",
-    icon: DollarSign,
-  },
-]
+interface Developer {
+  id: string
+  name: string
+  email: string
+  company: string
+  registeredAt: string
+  status: "active" | "pending" | "suspended"
+}
 
-// Mock data for recent registrations
-const recentRegistrations = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "john.doe@example.com",
-    company: "Acme Corp",
-    registeredAt: "2 minutes ago",
-    status: "pending",
-  },
-  {
-    id: 2,
-    name: "Sarah Chen",
-    email: "sarah.chen@techstart.io",
-    company: "TechStart",
-    registeredAt: "15 minutes ago",
-    status: "approved",
-  },
-  {
-    id: 3,
-    name: "Mike Johnson",
-    email: "mike.j@devhub.com",
-    company: "DevHub Inc",
-    registeredAt: "1 hour ago",
-    status: "pending",
-  },
-  {
-    id: 4,
-    name: "Emily Rodriguez",
-    email: "emily.r@cloudnine.co",
-    company: "CloudNine",
-    registeredAt: "2 hours ago",
-    status: "approved",
-  },
-  {
-    id: 5,
-    name: "Alex Kim",
-    email: "alex.kim@startuplab.io",
-    company: "StartupLab",
-    registeredAt: "3 hours ago",
-    status: "rejected",
-  },
-]
+interface App {
+  id: string
+  name: string
+  developer: string
+  developerEmail: string
+  submittedAt: string
+  status: "approved" | "pending" | "rejected"
+  type?: string
+  priority?: string
+}
 
-// Mock data for pending reviews
-const pendingReviews = [
-  {
-    id: 1,
-    appName: "WeatherAPI Pro",
-    developer: "john.doe@example.com",
-    submittedAt: "15 minutes ago",
-    type: "New App",
-    priority: "high",
-  },
-  {
-    id: 2,
-    appName: "TaskMaster Integration",
-    developer: "sarah.chen@techstart.io",
-    submittedAt: "2 hours ago",
-    type: "Update",
-    priority: "medium",
-  },
-  {
-    id: 3,
-    appName: "DataSync Pro",
-    developer: "mike.j@devhub.com",
-    submittedAt: "4 hours ago",
-    type: "New App",
-    priority: "low",
-  },
-  {
-    id: 4,
-    appName: "Analytics Dashboard",
-    developer: "emily.r@cloudnine.co",
-    submittedAt: "6 hours ago",
-    type: "Update",
-    priority: "medium",
-  },
-]
+interface AnalyticsData {
+  stats: {
+    totalDevelopers: number
+    developersChange: number
+    activeApps: number
+    appsChange: number
+    apiRequestsToday: number
+    apiRequestsChange: number
+    revenueMonth: number
+    revenueChange: number
+  }
+  systemHealth: Array<{
+    name: string
+    status: "healthy" | "degraded" | "unhealthy"
+    uptime: string
+    latency: string
+  }>
+}
 
-// System health indicators
-const systemHealth = [
-  {
-    name: "API Gateway",
-    status: "healthy",
-    uptime: "99.99%",
-    latency: "45ms",
-    icon: Server,
-  },
-  {
-    name: "Database Cluster",
-    status: "healthy",
-    uptime: "99.97%",
-    latency: "12ms",
-    icon: Database,
-  },
-  {
-    name: "CDN",
-    status: "degraded",
-    uptime: "98.5%",
-    latency: "120ms",
-    icon: Wifi,
-  },
-  {
-    name: "Auth Service",
-    status: "healthy",
-    uptime: "100%",
-    latency: "28ms",
-    icon: Shield,
-  },
-]
-
-// Quick actions
+// Quick actions (static)
 const quickActions = [
   { name: "Add Developer", icon: Plus, href: "/developers/new" },
   { name: "Review Apps", icon: FileText, href: "/apps?status=pending" },
@@ -179,6 +79,7 @@ function getStatusBadgeVariant(status: string): "default" | "secondary" | "destr
   switch (status) {
     case "success":
     case "approved":
+    case "active":
     case "healthy":
       return "success"
     case "warning":
@@ -187,6 +88,7 @@ function getStatusBadgeVariant(status: string): "default" | "secondary" | "destr
     case "destructive":
     case "rejected":
     case "unhealthy":
+    case "suspended":
       return "destructive"
     case "pending":
       return "secondary"
@@ -221,12 +123,179 @@ function getHealthIcon(status: string) {
   }
 }
 
+function getServiceIcon(name: string) {
+  switch (name.toLowerCase()) {
+    case "api gateway":
+      return Server
+    case "database cluster":
+    case "database":
+      return Database
+    case "cdn":
+      return Wifi
+    case "auth service":
+    case "authentication":
+      return Shield
+    default:
+      return Server
+  }
+}
+
+function formatNumber(num: number): string {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + "M"
+  } else if (num >= 1000) {
+    return (num / 1000).toFixed(1) + "K"
+  }
+  return num.toString()
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return "just now"
+  if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`
+  return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`
+}
+
 export default function DashboardPage() {
+  const router = useRouter()
+  const [developers, setDevelopers] = useState<Developer[]>([])
+  const [pendingApps, setPendingApps] = useState<App[]>([])
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Fetch all data in parallel
+      const [developersRes, appsRes, analyticsRes] = await Promise.all([
+        fetch("/api/developers"),
+        fetch("/api/apps"),
+        fetch("/api/analytics"),
+      ])
+
+      // Handle developers
+      if (developersRes.ok) {
+        const developersData = await developersRes.json()
+        const developersList = developersData.developers || developersData || []
+        // Get the 5 most recent registrations
+        setDevelopers(
+          developersList
+            .sort((a: Developer, b: Developer) =>
+              new Date(b.registeredAt || b.createdAt).getTime() - new Date(a.registeredAt || a.createdAt).getTime()
+            )
+            .slice(0, 5)
+        )
+      }
+
+      // Handle apps - filter for pending reviews
+      if (appsRes.ok) {
+        const appsData = await appsRes.json()
+        const appsList = appsData.apps || appsData || []
+        setPendingApps(
+          appsList
+            .filter((app: App) => app.status === "pending")
+            .slice(0, 4)
+        )
+      }
+
+      // Handle analytics
+      if (analyticsRes.ok) {
+        const analyticsData = await analyticsRes.json()
+        setAnalytics(analyticsData)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load dashboard data")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // Build stats from analytics or use defaults
+  const stats = analytics?.stats
+    ? [
+        {
+          name: "Total Developers",
+          value: formatNumber(analytics.stats.totalDevelopers),
+          change: `${analytics.stats.developersChange >= 0 ? "+" : ""}${analytics.stats.developersChange}%`,
+          trend: analytics.stats.developersChange >= 0 ? "up" : "down",
+          icon: Users,
+        },
+        {
+          name: "Active Apps",
+          value: formatNumber(analytics.stats.activeApps),
+          change: `${analytics.stats.appsChange >= 0 ? "+" : ""}${analytics.stats.appsChange}%`,
+          trend: analytics.stats.appsChange >= 0 ? "up" : "down",
+          icon: AppWindow,
+        },
+        {
+          name: "API Requests Today",
+          value: formatNumber(analytics.stats.apiRequestsToday),
+          change: `${analytics.stats.apiRequestsChange >= 0 ? "+" : ""}${analytics.stats.apiRequestsChange}%`,
+          trend: analytics.stats.apiRequestsChange >= 0 ? "up" : "down",
+          icon: Activity,
+        },
+        {
+          name: "Revenue (MTD)",
+          value: formatCurrency(analytics.stats.revenueMonth),
+          change: `${analytics.stats.revenueChange >= 0 ? "+" : ""}${analytics.stats.revenueChange}%`,
+          trend: analytics.stats.revenueChange >= 0 ? "up" : "down",
+          icon: DollarSign,
+        },
+      ]
+    : [
+        { name: "Total Developers", value: "-", change: "-", trend: "up", icon: Users },
+        { name: "Active Apps", value: "-", change: "-", trend: "up", icon: AppWindow },
+        { name: "API Requests Today", value: "-", change: "-", trend: "up", icon: Activity },
+        { name: "Revenue (MTD)", value: "-", change: "-", trend: "up", icon: DollarSign },
+      ]
+
+  // System health from analytics or use defaults
+  const systemHealth = analytics?.systemHealth || []
+
   return (
     <div className="flex flex-col h-full">
       <Header title="Dashboard" description="Overview of your SoapBox developer platform" />
 
       <div className="flex-1 p-8 space-y-8 overflow-auto">
+        {/* Error State */}
+        {error && (
+          <Card className="border-red-500/50 bg-red-500/10">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3 text-red-500">
+                <AlertCircle className="h-5 w-5" />
+                <p>{error}</p>
+                <Button variant="outline" size="sm" onClick={fetchData} className="ml-auto">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Stats Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
@@ -238,7 +307,13 @@ export default function DashboardPage() {
                 <stat.icon className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{stat.value}</div>
+                <div className="text-2xl font-bold text-[hsl(var(--foreground))]">
+                  {isLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  ) : (
+                    stat.value
+                  )}
+                </div>
                 <div className="flex items-center text-xs mt-1">
                   {stat.trend === "up" ? (
                     <ArrowUpRight className="h-3 w-3 text-emerald-500 mr-1" />
@@ -259,45 +334,67 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Recent Registrations</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => window.location.href = '/developers'}>
-              View All
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => router.push('/developers')}>
+                View All
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-[hsl(var(--border))]">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Name</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Email</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Company</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Registered</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Status</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentRegistrations.map((registration) => (
-                    <tr key={registration.id} className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-[hsl(var(--muted))]/50">
-                      <td className="py-3 px-4 text-sm text-[hsl(var(--foreground))]">{registration.name}</td>
-                      <td className="py-3 px-4 text-sm text-[hsl(var(--muted-foreground))]">{registration.email}</td>
-                      <td className="py-3 px-4 text-sm text-[hsl(var(--foreground))]">{registration.company}</td>
-                      <td className="py-3 px-4 text-sm text-[hsl(var(--muted-foreground))]">{registration.registeredAt}</td>
-                      <td className="py-3 px-4">
-                        <Badge variant={getStatusBadgeVariant(registration.status)}>
-                          {registration.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </td>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--muted-foreground))]" />
+              </div>
+            ) : developers.length === 0 ? (
+              <div className="py-12 text-center text-[hsl(var(--muted-foreground))]">
+                No recent registrations
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-[hsl(var(--border))]">
+                      <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Name</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Email</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Company</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Registered</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Status</th>
+                      <th className="text-right py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {developers.map((registration) => (
+                      <tr key={registration.id} className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-[hsl(var(--muted))]/50">
+                        <td className="py-3 px-4 text-sm text-[hsl(var(--foreground))]">{registration.name}</td>
+                        <td className="py-3 px-4 text-sm text-[hsl(var(--muted-foreground))]">{registration.email}</td>
+                        <td className="py-3 px-4 text-sm text-[hsl(var(--foreground))]">{registration.company}</td>
+                        <td className="py-3 px-4 text-sm text-[hsl(var(--muted-foreground))]">
+                          {formatRelativeTime(registration.registeredAt || registration.createdAt)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge variant={getStatusBadgeVariant(registration.status)}>
+                            {registration.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => router.push(`/developers/${registration.id}`)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -307,41 +404,59 @@ export default function DashboardPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Pending Reviews</CardTitle>
               <Badge variant="secondary" className="ml-2">
-                {pendingReviews.length} pending
+                {pendingApps.length} pending
               </Badge>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {pendingReviews.map((review) => (
-                  <div
-                    key={review.id}
-                    className="flex items-center justify-between py-3 px-4 rounded-lg border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]/50 transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-[hsl(var(--foreground))]">
-                          {review.appName}
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--muted-foreground))]" />
+                </div>
+              ) : pendingApps.length === 0 ? (
+                <div className="py-12 text-center text-[hsl(var(--muted-foreground))]">
+                  No pending reviews
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pendingApps.map((review) => (
+                    <div
+                      key={review.id}
+                      className="flex items-center justify-between py-3 px-4 rounded-lg border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]/50 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-[hsl(var(--foreground))]">
+                            {review.name}
+                          </p>
+                          {review.priority && (
+                            <Badge variant={getPriorityBadgeVariant(review.priority)} className="text-xs">
+                              {review.priority}
+                            </Badge>
+                          )}
+                          {review.type && (
+                            <Badge variant="outline" className="text-xs">
+                              {review.type}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                          {review.developerEmail || review.developer} - {formatRelativeTime(review.submittedAt || review.createdAt)}
                         </p>
-                        <Badge variant={getPriorityBadgeVariant(review.priority)} className="text-xs">
-                          {review.priority}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {review.type}
-                        </Badge>
                       </div>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                        {review.developer} - {review.submittedAt}
-                      </p>
+                      <div className="flex gap-2 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => router.push(`/apps/${review.id}`)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Review
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-2 ml-4">
-                      <Button variant="outline" size="sm">
-                        <Eye className="h-4 w-4 mr-1" />
-                        Review
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -353,27 +468,40 @@ export default function DashboardPage() {
                 <CardTitle>System Health</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {systemHealth.map((service) => (
-                    <div
-                      key={service.name}
-                      className="flex items-center justify-between py-2"
-                    >
-                      <div className="flex items-center gap-3">
-                        <service.icon className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-                        <div>
-                          <p className="text-sm font-medium text-[hsl(var(--foreground))]">
-                            {service.name}
-                          </p>
-                          <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                            {service.uptime} uptime - {service.latency}
-                          </p>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--muted-foreground))]" />
+                  </div>
+                ) : systemHealth.length === 0 ? (
+                  <div className="py-8 text-center text-[hsl(var(--muted-foreground))]">
+                    No health data available
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {systemHealth.map((service) => {
+                      const ServiceIcon = getServiceIcon(service.name)
+                      return (
+                        <div
+                          key={service.name}
+                          className="flex items-center justify-between py-2"
+                        >
+                          <div className="flex items-center gap-3">
+                            <ServiceIcon className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+                            <div>
+                              <p className="text-sm font-medium text-[hsl(var(--foreground))]">
+                                {service.name}
+                              </p>
+                              <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                                {service.uptime} uptime - {service.latency}
+                              </p>
+                            </div>
+                          </div>
+                          {getHealthIcon(service.status)}
                         </div>
-                      </div>
-                      {getHealthIcon(service.status)}
-                    </div>
-                  ))}
-                </div>
+                      )
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -389,7 +517,7 @@ export default function DashboardPage() {
                       key={action.name}
                       variant="outline"
                       className="w-full justify-start"
-                      onClick={() => window.location.href = action.href}
+                      onClick={() => router.push(action.href)}
                     >
                       <action.icon className="h-4 w-4 mr-2" />
                       {action.name}

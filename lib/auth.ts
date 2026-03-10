@@ -21,7 +21,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         try {
-          const response = await fetch(`${apiUrl}/admin/auth/login`, {
+          const response = await fetch(`${apiUrl}/api/admin/auth/login`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
