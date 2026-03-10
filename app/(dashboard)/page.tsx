@@ -200,7 +200,7 @@ export default function DashboardPage() {
         setDevelopers(
           developersList
             .sort((a: Developer, b: Developer) =>
-              new Date(b.registeredAt || b.createdAt).getTime() - new Date(a.registeredAt || a.createdAt).getTime()
+              new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime()
             )
             .slice(0, 5)
         )
