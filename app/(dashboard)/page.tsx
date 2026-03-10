@@ -373,7 +373,7 @@ export default function DashboardPage() {
                         <td className="py-3 px-4 text-sm text-[hsl(var(--muted-foreground))]">{registration.email}</td>
                         <td className="py-3 px-4 text-sm text-[hsl(var(--foreground))]">{registration.company}</td>
                         <td className="py-3 px-4 text-sm text-[hsl(var(--muted-foreground))]">
-                          {formatRelativeTime(registration.registeredAt || registration.createdAt)}
+                          {formatRelativeTime(registration.registeredAt)}
                         </td>
                         <td className="py-3 px-4">
                           <Badge variant={getStatusBadgeVariant(registration.status)}>
