@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from "@/components/ui"
-import { Header, PageHeader } from "@/components/layout"
+import { Header } from "@/components/layout"
 import {
   Users,
   AppWindow,
@@ -11,7 +11,16 @@ import {
   ArrowDownRight,
   Plus,
   Settings,
-  FileText
+  FileText,
+  CheckCircle,
+  AlertTriangle,
+  XCircle,
+  Clock,
+  Eye,
+  Server,
+  Database,
+  Wifi,
+  Shield
 } from "lucide-react"
 
 // Mock data for stats
@@ -31,7 +40,7 @@ const stats = [
     icon: AppWindow,
   },
   {
-    name: "API Requests (24h)",
+    name: "API Requests Today",
     value: "4.2M",
     change: "+23.1%",
     trend: "up",
@@ -46,49 +55,115 @@ const stats = [
   },
 ]
 
-// Mock data for recent activity
-const recentActivity = [
+// Mock data for recent registrations
+const recentRegistrations = [
   {
     id: 1,
-    type: "developer_signup",
-    message: "New developer registered: john.doe@example.com",
-    time: "2 minutes ago",
+    name: "John Doe",
+    email: "john.doe@example.com",
+    company: "Acme Corp",
+    registeredAt: "2 minutes ago",
     status: "pending",
   },
   {
     id: 2,
-    type: "app_submitted",
-    message: "App submitted for review: WeatherAPI Pro",
-    time: "15 minutes ago",
-    status: "pending",
+    name: "Sarah Chen",
+    email: "sarah.chen@techstart.io",
+    company: "TechStart",
+    registeredAt: "15 minutes ago",
+    status: "approved",
   },
   {
     id: 3,
-    type: "app_approved",
-    message: "App approved: TaskMaster Integration",
-    time: "1 hour ago",
-    status: "success",
+    name: "Mike Johnson",
+    email: "mike.j@devhub.com",
+    company: "DevHub Inc",
+    registeredAt: "1 hour ago",
+    status: "pending",
   },
   {
     id: 4,
-    type: "rate_limit_exceeded",
-    message: "Rate limit exceeded for app: DataSync",
-    time: "2 hours ago",
-    status: "warning",
+    name: "Emily Rodriguez",
+    email: "emily.r@cloudnine.co",
+    company: "CloudNine",
+    registeredAt: "2 hours ago",
+    status: "approved",
   },
   {
     id: 5,
-    type: "developer_suspended",
-    message: "Developer suspended: spam_user@temp.com",
-    time: "3 hours ago",
-    status: "destructive",
+    name: "Alex Kim",
+    email: "alex.kim@startuplab.io",
+    company: "StartupLab",
+    registeredAt: "3 hours ago",
+    status: "rejected",
+  },
+]
+
+// Mock data for pending reviews
+const pendingReviews = [
+  {
+    id: 1,
+    appName: "WeatherAPI Pro",
+    developer: "john.doe@example.com",
+    submittedAt: "15 minutes ago",
+    type: "New App",
+    priority: "high",
   },
   {
-    id: 6,
-    type: "subscription_upgrade",
-    message: "Subscription upgraded: acme-corp to Enterprise",
-    time: "4 hours ago",
-    status: "success",
+    id: 2,
+    appName: "TaskMaster Integration",
+    developer: "sarah.chen@techstart.io",
+    submittedAt: "2 hours ago",
+    type: "Update",
+    priority: "medium",
+  },
+  {
+    id: 3,
+    appName: "DataSync Pro",
+    developer: "mike.j@devhub.com",
+    submittedAt: "4 hours ago",
+    type: "New App",
+    priority: "low",
+  },
+  {
+    id: 4,
+    appName: "Analytics Dashboard",
+    developer: "emily.r@cloudnine.co",
+    submittedAt: "6 hours ago",
+    type: "Update",
+    priority: "medium",
+  },
+]
+
+// System health indicators
+const systemHealth = [
+  {
+    name: "API Gateway",
+    status: "healthy",
+    uptime: "99.99%",
+    latency: "45ms",
+    icon: Server,
+  },
+  {
+    name: "Database Cluster",
+    status: "healthy",
+    uptime: "99.97%",
+    latency: "12ms",
+    icon: Database,
+  },
+  {
+    name: "CDN",
+    status: "degraded",
+    uptime: "98.5%",
+    latency: "120ms",
+    icon: Wifi,
+  },
+  {
+    name: "Auth Service",
+    status: "healthy",
+    uptime: "100%",
+    latency: "28ms",
+    icon: Shield,
   },
 ]
 
@@ -103,10 +178,15 @@ const quickActions = [
 function getStatusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" | "success" | "warning" {
   switch (status) {
     case "success":
+    case "approved":
+    case "healthy":
       return "success"
     case "warning":
+    case "degraded":
       return "warning"
     case "destructive":
+    case "rejected":
+    case "unhealthy":
       return "destructive"
     case "pending":
       return "secondary"
@@ -115,12 +195,38 @@ function getStatusBadgeVariant(status: string): "default" | "secondary" | "destr
   }
 }
 
+function getPriorityBadgeVariant(priority: string): "default" | "secondary" | "destructive" | "outline" | "success" | "warning" {
+  switch (priority) {
+    case "high":
+      return "destructive"
+    case "medium":
+      return "warning"
+    case "low":
+      return "secondary"
+    default:
+      return "default"
+  }
+}
+
+function getHealthIcon(status: string) {
+  switch (status) {
+    case "healthy":
+      return <CheckCircle className="h-4 w-4 text-emerald-500" />
+    case "degraded":
+      return <AlertTriangle className="h-4 w-4 text-yellow-500" />
+    case "unhealthy":
+      return <XCircle className="h-4 w-4 text-red-500" />
+    default:
+      return <Clock className="h-4 w-4 text-gray-500" />
+  }
+}
+
 export default function DashboardPage() {
   return (
     <div className="flex flex-col h-full">
       <Header title="Dashboard" description="Overview of your SoapBox developer platform" />
 
-      <div className="flex-1 p-8 space-y-8">
+      <div className="flex-1 p-8 space-y-8 overflow-auto">
         {/* Stats Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
@@ -149,57 +255,150 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        {/* Recent Registrations Table */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Recent Registrations</CardTitle>
+            <Button variant="outline" size="sm" onClick={() => window.location.href = '/developers'}>
+              View All
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-[hsl(var(--border))]">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Name</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Email</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Company</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Registered</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Status</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-[hsl(var(--muted-foreground))]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentRegistrations.map((registration) => (
+                    <tr key={registration.id} className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-[hsl(var(--muted))]/50">
+                      <td className="py-3 px-4 text-sm text-[hsl(var(--foreground))]">{registration.name}</td>
+                      <td className="py-3 px-4 text-sm text-[hsl(var(--muted-foreground))]">{registration.email}</td>
+                      <td className="py-3 px-4 text-sm text-[hsl(var(--foreground))]">{registration.company}</td>
+                      <td className="py-3 px-4 text-sm text-[hsl(var(--muted-foreground))]">{registration.registeredAt}</td>
+                      <td className="py-3 px-4">
+                        <Badge variant={getStatusBadgeVariant(registration.status)}>
+                          {registration.status}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Button variant="ghost" size="sm">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Recent Activity */}
+          {/* Pending Reviews */}
           <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Pending Reviews</CardTitle>
+              <Badge variant="secondary" className="ml-2">
+                {pendingReviews.length} pending
+              </Badge>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentActivity.map((activity) => (
+                {pendingReviews.map((review) => (
                   <div
-                    key={activity.id}
-                    className="flex items-center justify-between py-3 border-b border-[hsl(var(--border))] last:border-0"
+                    key={review.id}
+                    className="flex items-center justify-between py-3 px-4 rounded-lg border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]/50 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[hsl(var(--foreground))] truncate">
-                        {activity.message}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-[hsl(var(--foreground))]">
+                          {review.appName}
+                        </p>
+                        <Badge variant={getPriorityBadgeVariant(review.priority)} className="text-xs">
+                          {review.priority}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {review.type}
+                        </Badge>
+                      </div>
                       <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                        {activity.time}
+                        {review.developer} - {review.submittedAt}
                       </p>
                     </div>
-                    <Badge variant={getStatusBadgeVariant(activity.status)} className="ml-4">
-                      {activity.status}
-                    </Badge>
+                    <div className="flex gap-2 ml-4">
+                      <Button variant="outline" size="sm">
+                        <Eye className="h-4 w-4 mr-1" />
+                        Review
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3">
-                {quickActions.map((action) => (
-                  <Button
-                    key={action.name}
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => window.location.href = action.href}
-                  >
-                    <action.icon className="h-4 w-4 mr-2" />
-                    {action.name}
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/* System Health & Quick Actions */}
+          <div className="space-y-6">
+            {/* System Health */}
+            <Card>
+              <CardHeader>
+                <CardTitle>System Health</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {systemHealth.map((service) => (
+                    <div
+                      key={service.name}
+                      className="flex items-center justify-between py-2"
+                    >
+                      <div className="flex items-center gap-3">
+                        <service.icon className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+                        <div>
+                          <p className="text-sm font-medium text-[hsl(var(--foreground))]">
+                            {service.name}
+                          </p>
+                          <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                            {service.uptime} uptime - {service.latency}
+                          </p>
+                        </div>
+                      </div>
+                      {getHealthIcon(service.status)}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Quick Actions */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3">
+                  {quickActions.map((action) => (
+                    <Button
+                      key={action.name}
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => window.location.href = action.href}
+                    >
+                      <action.icon className="h-4 w-4 mr-2" />
+                      {action.name}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
