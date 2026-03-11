@@ -440,7 +440,7 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                          {review.developerEmail || review.developer} - {formatRelativeTime(review.submittedAt || review.createdAt)}
+                          {review.developerEmail || review.developer} - {formatRelativeTime(review.submittedAt)}
                         </p>
                       </div>
                       <div className="flex gap-2 ml-4">
