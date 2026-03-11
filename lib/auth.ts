@@ -39,9 +39,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const data = await response.json();
 
           return {
-            id: data.user.id,
-            email: data.user.email,
-            name: data.user.name,
+            id: data.admin.id,
+            email: data.admin.email,
+            name: data.admin.name,
             accessToken: data.accessToken,
           };
         } catch (error) {
